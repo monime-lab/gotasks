@@ -3,7 +3,7 @@
 
 # gotasks
 
-A simple, flexible and production inspired golang retry library
+A production inspired task parallelization library
 
 ### Install
 
