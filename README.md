@@ -42,7 +42,7 @@ func main() {
 }
 
 func exampleOne() {
-	_, err := gotasks.NewTaskRunner( /* Options here... */ ).
+	_, err := gotasks.NewTaskRunner( /* Options here... */).
 		AddRunnableTask(func(ctx context.Context) error {
 			return saveToStore1()
 		}).
