@@ -7,7 +7,9 @@ package gotasks
 
 import (
 	"context"
+	"fmt"
 	"github.com/monime-lab/gotries"
+	"sync/atomic"
 )
 
 type (
@@ -29,22 +31,31 @@ type (
 	}
 )
 
-var _ RunnerTask = Runnable(func(ctx context.Context) error {
-	return nil
-})
+var (
+	functionRunnableIndex uint64
+	functionCallableIndex uint64
+	_                     RunnerTask = Runnable(func(ctx context.Context) error {
+		return nil
+	})
+	_ RunnerTask = Callable(func(ctx context.Context) (interface{}, error) {
+		return 0, nil
+	})
+)
 
 func (r Runnable) Name() string {
-	return "func"
+	id := atomic.AddUint64(&functionRunnableIndex, 1)
+	return fmt.Sprintf("runnable-task-%d", id)
 }
 
 func (r Runnable) Run(ctx context.Context) (interface{}, error) {
 	return nil, r(ctx)
 }
 
-func (f Callable) Name() string {
-	return "func"
+func (c Callable) Name() string {
+	id := atomic.AddUint64(&functionCallableIndex, 1)
+	return fmt.Sprintf("callable-task-%d", id)
 }
 
-func (f Callable) Run(ctx context.Context) (interface{}, error) {
-	return f(ctx)
+func (c Callable) Run(ctx context.Context) (interface{}, error) {
+	return c(ctx)
 }
