@@ -125,43 +125,43 @@ func (s *schedulerImpl) Schedule(ctx context.Context, runnable Runnable, delay t
 	if err := s.ensureRunning(); err != nil {
 		panic(err)
 	}
-	ref := newScheduledFuture()
-	ref.setStopFunc(s.addTask(ctx, ref, func(ctx context.Context) error {
+	future := newScheduledFuture()
+	future.setCancelFunc(s.addTask(ctx, future, func(ctx context.Context) error {
 		err := runnable(ctx)
 		return err
 	}, true, delay))
-	return ref
+	return future
 }
 
 func (s *schedulerImpl) ScheduleAtFixedRate(
 	ctx context.Context, runnable Runnable, startDelay, interval time.Duration) Future {
 	future := newScheduledFuture()
-	future.setStopFunc(s.scheduleAtFixedRate(ctx, future, runnable, startDelay, interval))
+	future.setCancelFunc(s.scheduleAtFixedRate(ctx, future, runnable, startDelay, interval))
 	return future
 }
 
-func (s *schedulerImpl) scheduleAtFixedRate(ctx context.Context, ref *futureImpl,
+func (s *schedulerImpl) scheduleAtFixedRate(ctx context.Context, future *futureImpl,
 	runnable Runnable, firstDelay, consecutiveDelay time.Duration) func() {
-	if ref.hasStopped() {
+	if future.isCancelled() {
 		return nil
 	}
-	return s.addTask(ctx, ref, func(ctx context.Context) error {
-		defer s.scheduleAtFixedRate(ctx, ref, runnable, consecutiveDelay, consecutiveDelay)
+	return s.addTask(ctx, future, func(ctx context.Context) error {
+		defer s.scheduleAtFixedRate(ctx, future, runnable, consecutiveDelay, consecutiveDelay)
 		return runnable(ctx)
 	}, false, firstDelay)
 }
 
 func (s *schedulerImpl) addTask(ctx context.Context,
-	ref *futureImpl, runnable Runnable, oneTime bool, delay time.Duration) func() {
+	future *futureImpl, runnable Runnable, oneTime bool, delay time.Duration) func() {
 	if err := s.semaphore.Acquire(ctx, 1); err != nil {
 		log.Printf("Unable to acquire permit in order to enqueue task. Error: %s\n", err)
-		ref.writeErrorToChannel(err, oneTime)
+		future.writeResultToChannel(err, oneTime)
 		return nil
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	t := &task{
-		ref:      ref,
+		future:   future,
 		context:  ctx,
 		oneTime:  oneTime,
 		runnable: runnable,
@@ -243,7 +243,7 @@ type task struct {
 	execTime time.Time
 
 	runnable Runnable
-	ref      *futureImpl
+	future   *futureImpl
 	context  context.Context
 }
 
@@ -278,11 +278,11 @@ func (t *task) run(semaphore *semaphore.Weighted) {
 				err = fmt.Errorf("%v", r)
 			}
 			log.Println("Panic on running task. Error: %", err)
-			t.ref.writeErrorToChannel(err, t.oneTime)
+			t.future.writeResultToChannel(err, t.oneTime)
 		}
 	}()
 	if !t.isCancelled() {
 		err := t.runnable(t.context)
-		t.ref.writeErrorToChannel(err, t.oneTime)
+		t.future.writeResultToChannel(err, t.oneTime)
 	}
 }

@@ -90,25 +90,25 @@ func schedulerExampleOne() {
 		println("Printed after 2 seconds")
 		return nil
 	}, 2*time.Second)
-	ref3 := gotasks.DefaultScheduler().Schedule(context.Background(), func(ctx context.Context) error {
+	future3 := gotasks.DefaultScheduler().Schedule(context.Background(), func(ctx context.Context) error {
 		println("Printed after 5 seconds")
 		return errors.New("error after printing: 'Printed after 5 seconds")
 	}, 5*time.Second)
-	if err := ref3.Wait(); err != nil {
+	if err := future3.Wait(); err != nil {
 		log.Fatal(err)
 	}
 }
 
 func schedulerExampleTwo() {
-	ref := gotasks.DefaultScheduler().ScheduleAtFixedRate(context.Background(), func(ctx context.Context) error {
+	future := gotasks.DefaultScheduler().ScheduleAtFixedRate(context.Background(), func(ctx context.Context) error {
 		fmt.Printf("Running at: %s\n", time.Now().Format(time.RFC3339))
 		return errors.New("oops!!! What's wrong")
 	}, 0, 1*time.Second)
 	go func() {
 		time.Sleep(10 * time.Second)
 		println("Stopping the scheduled action")
-		ref.Stop()
+		future.Cancel()
 	}()
-	err := ref.Wait()
+	err := future.Wait()
 	log.Printf(":::::::::::::::::::: Stopped. Err: %v", err)
 }

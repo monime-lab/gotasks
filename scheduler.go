@@ -13,7 +13,7 @@ import (
 
 type (
 	Future interface {
-		Stop() Future
+		Cancel() Future
 		Wait() error
 	}
 	OnStopCallback   func()
@@ -33,15 +33,16 @@ type futureImpl struct {
 	lock        sync.RWMutex
 	errCh       chan error
 	lastWaitErr error
-	stopCh      chan interface{}
-	stopFunc    func()
-	stop        bool
+	doneChannel chan interface{}
+	cancelFunc  func()
+	cancel      bool
+	completed   bool
 }
 
 func newScheduledFuture() *futureImpl {
 	return &futureImpl{
-		errCh:  make(chan error),
-		stopCh: make(chan interface{}, 1),
+		errCh:       make(chan error),
+		doneChannel: make(chan interface{}, 1),
 	}
 }
 
@@ -52,48 +53,59 @@ func (f *futureImpl) Wait() error {
 			if ok {
 				f.lastWaitErr = e
 			}
-		case <-f.stopCh:
+		case <-f.doneChannel:
 			return f.lastWaitErr
 		}
 	}
 }
 
-func (f *futureImpl) setStopFunc(stopFunc func()) {
+func (f *futureImpl) setCancelFunc(cancelFunc func()) {
 	f.lock.Lock()
 	defer f.lock.Unlock()
-	f.stopFunc = stopFunc
+	f.cancelFunc = cancelFunc
 }
 
-func (f *futureImpl) Stop() Future {
+func (f *futureImpl) Cancel() Future {
 	f.lock.Lock()
 	defer f.lock.Unlock()
-	if f.stop {
+	if f.cancel || f.completed {
 		return f
 	}
-	if f.stopFunc != nil {
-		f.stopFunc()
+	if f.cancelFunc != nil {
+		f.cancelFunc()
 	}
 	close(f.errCh)
-	close(f.stopCh)
-	f.stop = true
+	close(f.doneChannel)
+	f.cancel = true
 	return f
 }
 
-func (f *futureImpl) hasStopped() bool {
-	f.lock.RLock()
-	defer f.lock.RUnlock()
-	return f.stop
+func (f *futureImpl) complete() {
+	f.lock.Lock()
+	defer f.lock.Unlock()
+	if f.completed || f.cancel {
+		return
+	}
+	close(f.errCh)
+	close(f.doneChannel)
+	f.completed = true
 }
 
-func (f *futureImpl) writeErrorToChannel(err error, stop bool) {
-	if !f.hasStopped() {
+func (f *futureImpl) isCancelled() bool {
+	f.lock.RLock()
+	defer f.lock.RUnlock()
+	return f.cancel
+}
+
+func (f *futureImpl) writeResultToChannel(err error, complete bool) {
+	if !f.isCancelled() {
 		select {
 		case f.errCh <- err:
 		default:
 			// Drop this error as the channel is full
 		}
-		if stop {
-			_ = f.Stop()
+		if complete {
+			f.complete()
 		}
 	}
 }
