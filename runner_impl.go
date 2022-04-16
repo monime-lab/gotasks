@@ -19,11 +19,72 @@ var (
 )
 
 type (
+	RunnerOption interface {
+		applyRunnerOption(r *taskRunner)
+	}
+	runnerOptionFunc func(r *taskRunner)
+)
+
+func (f runnerOptionFunc) applyRunnerOption(r *taskRunner) {
+	f(r)
+}
+
+// WithEagerFail is a fail fast switch useful
+// when calling runner.RunAndWaitAll()
+// The call will return on the first failure
+func WithEagerFail(enable bool) RunnerOption {
+	return runnerOptionFunc(func(r *taskRunner) {
+		r.eagerFail = enable
+	})
+}
+
+// WithRetryOptions sets the default retry options for all the added tasks
+func WithRetryOptions(options ...gotries.Option) RunnerOption {
+	return runnerOptionFunc(func(r *taskRunner) {
+		r.retryOptions = append(r.retryOptions, options...)
+	})
+}
+
+// WithSequentialParallelism is a syntactic sugar to WithMaxParallelism(1).
+// Useful for executing multiple tasks serially
+func WithSequentialParallelism() RunnerOption {
+	return WithMaxParallelism(1)
+}
+
+// WithMaxParallelism sets the maximum parallelism for the runner;
+// if max is less than 1, then no parallelism limit is set
+// This is a concurrency rate-limiter for when the number of tasks
+// can be high. At any point, there are at most `max`
+// task (goroutines) running concurrently.
+func WithMaxParallelism(max int) RunnerOption {
+	var permit Permits = noopPermit{}
+	if max >= 1 {
+		permit = newSemaphorePermit(max)
+	}
+	return runnerOptionFunc(func(r *taskRunner) {
+		r.permits = permit
+	})
+}
+
+func NewTaskRunner(options ...RunnerOption) TaskRunner {
+	runner := &taskRunner{
+		eagerFail:        false,
+		permits:          noopPermit{},
+		tasks:            make([]RunnerTask, 0),
+		taskRetryOptions: make([][]gotries.Option, 0),
+	}
+	for _, option := range options {
+		option.applyRunnerOption(runner)
+	}
+	return runner
+}
+
+type (
 	taskRunner struct {
 		lock             sync.Mutex
 		eagerFail        bool
 		permits          Permits
-		tasks            []Task
+		tasks            []RunnerTask
 		retryOptions     []gotries.Option
 		taskRetryOptions [][]gotries.Option
 	}
@@ -37,7 +98,7 @@ func (r *taskRunner) AddCallableTask(callable Callable, options ...gotries.Optio
 	return r.AddTask(callable, options...)
 }
 
-func (r *taskRunner) AddTask(task Task, options ...gotries.Option) TaskRunner {
+func (r *taskRunner) AddTask(task RunnerTask, options ...gotries.Option) TaskRunner {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 	r.tasks = append(r.tasks, task)
@@ -101,10 +162,10 @@ func (r *taskRunner) runTasks(ctx context.Context) (context.CancelFunc, chan res
 	errChan := make(chan error, len(r.tasks))
 	resultChan := make(chan result, len(r.tasks))
 	runCtx, cancel := context.WithCancel(ctx)
-	for pos, task := range r.tasks {
+	for pos, t := range r.tasks {
 		options := r.taskRetryOptions[pos]
 		wrapper := &taskWrapper{
-			pos: pos, task: task,
+			pos: pos, task: t,
 			retryOptions: options,
 		}
 		// limits goroutine creation with the permit
@@ -155,7 +216,7 @@ func (r *taskRunner) defaultRetry(options []gotries.Option) []gotries.Option {
 
 type taskWrapper struct {
 	pos          int
-	task         Task
+	task         RunnerTask
 	retryOptions []gotries.Option
 }
 

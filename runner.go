@@ -11,18 +11,17 @@ import (
 )
 
 type (
-	Runnable func(context.Context) error
-	Callable func(context.Context) (interface{}, error)
-	Permits  interface {
+	Permits interface {
 		Acquire(ctx context.Context) error
 		Release(ctx context.Context)
 	}
-	Task interface {
+	RunnerTask interface {
 		Name() string
 		Run(context.Context) (interface{}, error)
 	}
+	Callable   func(ctx context.Context) (interface{}, error)
 	TaskRunner interface {
-		AddTask(task Task, options ...gotries.Option) TaskRunner
+		AddTask(task RunnerTask, options ...gotries.Option) TaskRunner
 		AddRunnableTask(runnable Runnable, options ...gotries.Option) TaskRunner
 		AddCallableTask(callable Callable, options ...gotries.Option) TaskRunner
 		RunAndWaitAll(ctx context.Context) ([]interface{}, error)
@@ -30,16 +29,16 @@ type (
 	}
 )
 
-var _ Task = Runnable(func(ctx context.Context) error {
+var _ RunnerTask = Runnable(func(ctx context.Context) error {
 	return nil
 })
 
-func (f Runnable) Name() string {
+func (r Runnable) Name() string {
 	return "func"
 }
 
-func (f Runnable) Run(ctx context.Context) (interface{}, error) {
-	return nil, f(ctx)
+func (r Runnable) Run(ctx context.Context) (interface{}, error) {
+	return nil, r(ctx)
 }
 
 func (f Callable) Name() string {

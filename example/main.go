@@ -3,10 +3,12 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/monime-lab/gotasks"
 	"github.com/monime-lab/gotries"
 	"log"
+	"time"
 )
 
 func saveToStore1() error {
@@ -17,16 +19,18 @@ func saveToStore2() error {
 	return nil
 }
 
-func getUserByID(_ int) (interface{}, error) {
-	return struct{}{}, nil
+func getUserByID(id int) (interface{}, error) {
+	return fmt.Sprintf("user-%d", id), nil
 }
 
 func main() {
-	exampleOne()
-	exampleTwo()
+	runnerExampleOne()
+	runnerExampleTwo()
+	schedulerExampleOne()
+	schedulerExampleTwo()
 }
 
-func exampleOne() {
+func runnerExampleOne() {
 	_, err := gotasks.NewTaskRunner( /* Options here... */ ).
 		AddRunnableTask(func(ctx context.Context) error {
 			return saveToStore1()
@@ -40,7 +44,7 @@ func exampleOne() {
 	log.Printf("At least one of them succeeds!!!")
 }
 
-func exampleTwo() {
+func runnerExampleTwo() {
 	runner := gotasks.NewTaskRunner(
 		// This is a fail fast switch useful
 		// when calling runner.RunAndWaitAll()
@@ -62,11 +66,11 @@ func exampleTwo() {
 			gotries.WithMaxAttempts(2),
 		),
 	)
-	for i := 0; i < 10; i++ {
-		func(n int) {
+	for i := 1; i <= 5; i++ {
+		func(id int) {
 			runner.AddCallableTask(func(ctx context.Context) (interface{}, error) {
-				return getUserByID(1)
-			}, gotries.WithTaskName(fmt.Sprintf("Task-%d", i)))
+				return getUserByID(id)
+			}, gotries.WithTaskName(fmt.Sprintf("RunnerTask-%d", i)))
 		}(i)
 	}
 	users, err := runner.RunAndWaitAll(context.TODO())
@@ -75,4 +79,36 @@ func exampleTwo() {
 		log.Fatalf("At least one failed. Error: %s", err)
 	}
 	log.Printf("Users: %s", users)
+}
+
+func schedulerExampleOne() {
+	_ = gotasks.DefaultScheduler().Schedule(context.Background(), func(ctx context.Context) error {
+		println("Printed after 1 second")
+		return nil
+	}, 1*time.Second)
+	_ = gotasks.DefaultScheduler().Schedule(context.Background(), func(ctx context.Context) error {
+		println("Printed after 2 seconds")
+		return nil
+	}, 2*time.Second)
+	ref3 := gotasks.DefaultScheduler().Schedule(context.Background(), func(ctx context.Context) error {
+		println("Printed after 5 seconds")
+		return errors.New("error after printing: 'Printed after 5 seconds")
+	}, 5*time.Second)
+	if err := ref3.Wait(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func schedulerExampleTwo() {
+	ref := gotasks.DefaultScheduler().ScheduleAtFixedRate(context.Background(), func(ctx context.Context) error {
+		fmt.Printf("Running at: %s\n", time.Now().Format(time.RFC3339))
+		return errors.New("oops!!! What's wrong")
+	}, 0, 1*time.Second)
+	go func() {
+		time.Sleep(10 * time.Second)
+		println("Stopping the scheduled action")
+		ref.Stop()
+	}()
+	err := ref.Wait()
+	log.Printf(":::::::::::::::::::: Stopped. Err: %v", err)
 }
