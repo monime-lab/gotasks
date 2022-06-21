@@ -13,9 +13,9 @@ import (
 
 type (
 	Future interface {
-		OnError(callback func(err error))
-		OnComplete(callback func())
-		OnCancel(callback func())
+		OnError(callback func(err error)) Future
+		OnComplete(callback func()) Future
+		OnCancel(callback func()) Future
 		Cancel() Future
 		Wait() error
 	}
@@ -52,22 +52,25 @@ func newScheduledFuture() *futureImpl {
 	}
 }
 
-func (f *futureImpl) OnError(callback func(err error)) {
+func (f *futureImpl) OnError(callback func(err error)) Future {
 	f.lock.Lock()
 	defer f.lock.Unlock()
 	f.onError = callback
+	return f
 }
 
-func (f *futureImpl) OnComplete(callback func()) {
+func (f *futureImpl) OnComplete(callback func()) Future {
 	f.lock.Lock()
 	defer f.lock.Unlock()
 	f.oComplete = callback
+	return f
 }
 
-func (f *futureImpl) OnCancel(callback func()) {
+func (f *futureImpl) OnCancel(callback func()) Future {
 	f.lock.Lock()
 	defer f.lock.Unlock()
 	f.onCancel = callback
+	return f
 }
 
 func (f *futureImpl) Wait() error {
