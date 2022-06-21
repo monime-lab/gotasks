@@ -16,6 +16,7 @@ type (
 		OnError(callback func(err error)) Future
 		OnComplete(callback func()) Future
 		OnCancel(callback func()) Future
+		OnFinally(callback func()) Future
 		Cancel() Future
 		Wait() error
 	}
@@ -43,6 +44,7 @@ type futureImpl struct {
 	onError     func(err error)
 	oComplete   func()
 	onCancel    func()
+	onFinally   func()
 }
 
 func newScheduledFuture() *futureImpl {
@@ -70,6 +72,13 @@ func (f *futureImpl) OnCancel(callback func()) Future {
 	f.lock.Lock()
 	defer f.lock.Unlock()
 	f.onCancel = callback
+	return f
+}
+
+func (f *futureImpl) OnFinally(callback func()) Future {
+	f.lock.Lock()
+	defer f.lock.Unlock()
+	f.onFinally = callback
 	return f
 }
 
@@ -101,6 +110,9 @@ func (f *futureImpl) Cancel() Future {
 	if f.cancelFunc != nil {
 		f.cancelFunc()
 	}
+	if f.onFinally != nil {
+		f.onFinally()
+	}
 	f.cancel = true
 	close(f.errCh)
 	close(f.doneChannel)
@@ -123,6 +135,9 @@ func (f *futureImpl) complete(err error) {
 		f.oComplete()
 	} else if err != nil && f.onError != nil {
 		f.onError(err)
+	}
+	if f.onFinally != nil {
+		f.onFinally()
 	}
 }
 
