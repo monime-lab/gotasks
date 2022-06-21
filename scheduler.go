@@ -13,6 +13,9 @@ import (
 
 type (
 	Future interface {
+		OnError(callback func(err error))
+		OnComplete(callback func())
+		OnCancel(callback func())
 		Cancel() Future
 		Wait() error
 	}
@@ -37,6 +40,9 @@ type futureImpl struct {
 	cancelFunc  func()
 	cancel      bool
 	completed   bool
+	onError     func(err error)
+	oComplete   func()
+	onCancel    func()
 }
 
 func newScheduledFuture() *futureImpl {
@@ -44,6 +50,24 @@ func newScheduledFuture() *futureImpl {
 		errCh:       make(chan error),
 		doneChannel: make(chan interface{}, 1),
 	}
+}
+
+func (f *futureImpl) OnError(callback func(err error)) {
+	f.lock.Lock()
+	defer f.lock.Unlock()
+	f.onError = callback
+}
+
+func (f *futureImpl) OnComplete(callback func()) {
+	f.lock.Lock()
+	defer f.lock.Unlock()
+	f.oComplete = callback
+}
+
+func (f *futureImpl) OnCancel(callback func()) {
+	f.lock.Lock()
+	defer f.lock.Unlock()
+	f.onCancel = callback
 }
 
 func (f *futureImpl) Wait() error {
@@ -74,21 +98,29 @@ func (f *futureImpl) Cancel() Future {
 	if f.cancelFunc != nil {
 		f.cancelFunc()
 	}
+	f.cancel = true
 	close(f.errCh)
 	close(f.doneChannel)
-	f.cancel = true
+	if f.onCancel != nil {
+		f.onCancel()
+	}
 	return f
 }
 
-func (f *futureImpl) complete() {
+func (f *futureImpl) complete(err error) {
 	f.lock.Lock()
 	defer f.lock.Unlock()
 	if f.completed || f.cancel {
 		return
 	}
+	f.completed = true
 	close(f.errCh)
 	close(f.doneChannel)
-	f.completed = true
+	if err == nil && f.oComplete != nil {
+		f.oComplete()
+	} else if err != nil && f.onError != nil {
+		f.onError(err)
+	}
 }
 
 func (f *futureImpl) isCancelled() bool {
@@ -105,7 +137,7 @@ func (f *futureImpl) writeResultToChannel(err error, complete bool) {
 			// Drop this error as the channel is full
 		}
 		if complete {
-			f.complete()
+			f.complete(err)
 		}
 	}
 }

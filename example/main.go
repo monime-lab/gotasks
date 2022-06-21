@@ -110,5 +110,5 @@ func schedulerExampleTwo() {
 		future.Cancel()
 	}()
 	err := future.Wait()
-	log.Printf(":::::::::::::::::::: Stopped. Err: %v", err)
+	log.Printf("Final Error: %v", err)
 }

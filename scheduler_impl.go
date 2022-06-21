@@ -154,7 +154,7 @@ func (s *schedulerImpl) scheduleAtFixedRate(ctx context.Context, future *futureI
 func (s *schedulerImpl) addTask(ctx context.Context,
 	future *futureImpl, runnable Runnable, oneTime bool, delay time.Duration) func() {
 	if err := s.semaphore.Acquire(ctx, 1); err != nil {
-		log.Printf("Unable to acquire permit in order to enqueue task. Error: %s\n", err)
+		log.Printf("Unable to acquire permit in order to enqueue task. Error: %s", err)
 		future.writeResultToChannel(err, oneTime)
 		return nil
 	}
@@ -194,7 +194,7 @@ func (s *schedulerImpl) Stop() error {
 	s.stopMu.Lock()
 	defer s.stopMu.Unlock()
 	if s.stopping {
-		log.Println("Stop already called")
+		log.Println("Scheduler has stopped already.")
 		return nil
 	}
 	s.stopping = true
