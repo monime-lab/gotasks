@@ -9,7 +9,6 @@ import (
 	"context"
 	"errors"
 	"github.com/monime-lab/gotries"
-	"go.uber.org/multierr"
 	"sync"
 )
 
@@ -123,12 +122,12 @@ func (r *taskRunner) RunAndWaitAll(ctx context.Context) ([]interface{}, error) {
 		case res := <-resultChan:
 			results[res.position] = res.value
 		case err2 := <-errChan:
-			err = multierr.Append(err, err2)
+			err = errors.Join(err, err2)
 			if r.eagerFail {
 				return nil, err
 			}
 		case <-ctx.Done():
-			err = multierr.Append(err, ctx.Err())
+			err = errors.Join(err, ctx.Err())
 		}
 	}
 	return results, err
@@ -149,9 +148,9 @@ func (r *taskRunner) RunAndWaitAny(ctx context.Context) (interface{}, error) {
 		case res := <-resultChan:
 			return res.value, nil
 		case err2 := <-errChan:
-			err = multierr.Append(err, err2)
+			err = errors.Join(err, err2)
 		case <-ctx.Done():
-			err = multierr.Append(err, ctx.Err())
+			err = errors.Join(err, ctx.Err())
 		}
 	}
 	return nil, err
