@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"golang.org/x/sync/semaphore"
 	"log"
-	"math"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -21,9 +20,7 @@ import (
 )
 
 var (
-	once                 sync.Once
 	schedulerID          uint64
-	defaultScheduler     Scheduler
 	_                    Scheduler = &schedulerImpl{}
 	ErrSchedulerStopping           = errors.New("scheduler is stopping")
 	ErrSchedulerStopped            = errors.New("scheduler is stopped")
@@ -38,17 +35,6 @@ type (
 
 func (f schedulerOptionFunc) appSchedulerOption(s *schedulerImpl) {
 	f(s)
-}
-
-func DefaultScheduler() Scheduler {
-	once.Do(func() {
-		defaultScheduler = NewScheduler(
-			WithSchedulerName("DefaultScheduler"),
-			WithSchedulerPoolSize(runtime.NumCPU()*4),
-			WithSchedulerMaxPoolSize(math.MaxInt64),
-		)
-	})
-	return defaultScheduler
 }
 
 func WithSchedulerName(name string) SchedulerOption {
