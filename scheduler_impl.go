@@ -131,9 +131,15 @@ func (s *schedulerImpl) scheduleAtFixedRate(ctx context.Context, future *futureI
 	if future.isCancelled() {
 		return nil
 	}
-	return s.addTask(ctx, future, func(ctx context.Context) error {
-		defer s.scheduleAtFixedRate(ctx, future, runnable, consecutiveDelay, consecutiveDelay)
-		return runnable(ctx)
+	return s.addTask(ctx, future, func(ctx context.Context) (err error) {
+		defer func() {
+			if errors.Is(err, context.Canceled) {
+				return
+			}
+			s.scheduleAtFixedRate(ctx, future, runnable, consecutiveDelay, consecutiveDelay)
+		}()
+		err = runnable(ctx)
+		return err
 	}, false, firstDelay)
 }
 
@@ -147,8 +153,8 @@ func (s *schedulerImpl) addTask(ctx context.Context,
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	t := &task{
-		future:   future,
 		context:  ctx,
+		future:   future,
 		oneTime:  oneTime,
 		runnable: runnable,
 		execTime: time.Now().Add(delay),
@@ -223,26 +229,20 @@ func (s *schedulerImpl) runTasks(index int) {
 }
 
 type task struct {
-	cancel2  bool
 	oneTime  bool
-	lock     sync.Mutex
+	canceled atomic.Bool
 	execTime time.Time
-
 	runnable Runnable
 	future   *futureImpl
 	context  context.Context
 }
 
 func (t *task) cancel() {
-	t.lock.Lock()
-	defer t.lock.Unlock()
-	t.cancel2 = true
+	t.canceled.Store(true)
 }
 
 func (t *task) isCancelled() bool {
-	t.lock.Lock()
-	defer t.lock.Unlock()
-	return t.cancel2
+	return t.canceled.Load()
 }
 
 func (t *task) readyForExecution() bool {
@@ -268,7 +268,12 @@ func (t *task) run(semaphore *semaphore.Weighted) {
 		}
 	}()
 	if !t.isCancelled() {
-		err := t.runnable(t.context)
-		t.future.writeResultToChannel(err, t.oneTime)
+		select {
+		case <-t.context.Done():
+			t.future.writeResultToChannel(t.context.Err(), t.oneTime)
+		default:
+			err := t.runnable(t.context)
+			t.future.writeResultToChannel(err, t.oneTime)
+		}
 	}
 }

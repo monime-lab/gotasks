@@ -2,6 +2,7 @@ package gotasks
 
 import (
 	"context"
+	"errors"
 	"log"
 	"math"
 	"runtime"
@@ -25,16 +26,19 @@ func DefaultScheduler() Scheduler {
 }
 
 func ScheduleTaskFunc(task func() error) {
-	ScheduleTaskFuncWithContext(func(ctx context.Context) error {
+	ScheduleTaskFuncWithContext(context.Background(), func(ctx context.Context) error {
 		return task()
 	})
 }
 
-func ScheduleTaskFuncWithContext(task func(ctx context.Context) error) {
-	DefaultScheduler().Schedule(context.Background(), func(ctx context.Context) error {
+func ScheduleTaskFuncWithContext(ctx context.Context, task func(ctx context.Context) error) {
+	DefaultScheduler().Schedule(ctx, func(ctx context.Context) error {
 		return task(ctx)
 	}, 0).
 		OnError(func(err error) {
+			if errors.Is(err, context.Canceled) {
+				return
+			}
 			log.Printf("ScheduleTask Error: %s", err)
 		})
 }
