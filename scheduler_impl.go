@@ -52,12 +52,12 @@ func WithSchedulerPoolSize(size int) SchedulerOption {
 	})
 }
 
-func WithSchedulerMaxPoolSize(max int) SchedulerOption {
-	if max < 1 {
+func WithSchedulerMaxPoolSize(mx int) SchedulerOption {
+	if mx < 1 {
 		panic("Max pool size cannot be < 1")
 	}
 	return schedulerOptionFunc(func(s *schedulerImpl) {
-		s.maxPoolSize = max
+		s.maxPoolSize = mx
 	})
 }
 

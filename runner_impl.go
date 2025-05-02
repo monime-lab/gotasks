@@ -55,10 +55,10 @@ func WithSequentialParallelism() RunnerOption {
 // This is a concurrency rate-limiter for when the number of tasks
 // can be high. At any point, there are at most `max`
 // task (goroutines) running concurrently.
-func WithMaxParallelism(max int) RunnerOption {
+func WithMaxParallelism(mx int) RunnerOption {
 	var permit Permits = noopPermit{}
-	if max >= 1 {
-		permit = newSemaphorePermit(max)
+	if mx >= 1 {
+		permit = newSemaphorePermit(mx)
 	}
 	return runnerOptionFunc(func(r *taskRunner) {
 		r.permits = permit
