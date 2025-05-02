@@ -136,6 +136,9 @@ func (s *schedulerImpl) scheduleAtFixedRate(ctx context.Context, future *futureI
 			if errors.Is(err, context.Canceled) {
 				return
 			}
+			if consecutiveDelay <= 0 {
+				return
+			}
 			s.scheduleAtFixedRate(ctx, future, runnable, consecutiveDelay, consecutiveDelay)
 		}()
 		err = runnable(ctx)
